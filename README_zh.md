@@ -37,11 +37,16 @@ shim 和启动脚本默认本仓库位于 `~/tools/foresight-zh`。
    shim/build.sh
    ```
 
-4. 可选：生成 Dock / Spotlight 启动器：
+4. 可选：生成 Dock / Spotlight 启动器。会创建 `~/Applications/Foresight 中文.app`（运行
+   `launch.sh`，使用 Foresight 的图标），并加到 Dock：
 
    ```bash
-   osacompile -o ~/Applications/"Foresight 中文.app" -e 'do shell script "$HOME/tools/foresight-zh/launch.sh"'
+   ./install-launcher.sh              # 创建启动器并加到 Dock
+   ./install-launcher.sh --uninstall  # 两者都移除
    ```
+
+   Foresight 更新后如果换了图标，再运行一次即可。Foresight 运行时，Dock 上还会在旁边显示
+   Foresight 自己的图标。
 
 5. 可选：安装自动重启守护程序。这个 LaunchAgent 每 5 秒检查一次，如果 Foresight 没有加载 shim，
    就通过 `launch.sh` 重新启动它。Dock 直接启动、通知、登录项、更新等情况都能覆盖。重启发生在
@@ -161,7 +166,7 @@ shim 在动手前会先检查，跳过的步骤会写进日志：
 - `shim/sherpa-onnx-c-api.h`：sherpa-onnx C API 头文件（v1.13.8，Apache-2.0，Xiaomi Corporation）
 - `shim/test/sv_harness.c`：把 48kHz float32 原始录音送进引擎做测试
 - `setup-sensevoice.sh`：下载引擎；`shim/build.sh`：构建 shim
-- `launch.sh`：启动脚本；`~/Applications/Foresight 中文.app` 是它的封装
+- `launch.sh`：启动脚本；`~/Applications/Foresight 中文.app` 是它的封装（由 `install-launcher.sh` 生成）
 - `watcher.sh`、`install-watcher.sh`：自动重启的 LaunchAgent（通过
   `~/Library/Logs/foresight-zh/shim.pid` 判断 shim 是否已加载）
 - `model-build/`、`make_override.py`、`pipeline_override.pb`：Gemma 备选方案

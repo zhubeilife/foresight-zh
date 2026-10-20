@@ -41,11 +41,16 @@ The shim and launcher expect this repo at `~/tools/foresight-zh`.
    shim/build.sh
    ```
 
-4. Optional, make a Dock/Spotlight launcher:
+4. Optional, make a Dock/Spotlight launcher. This creates `~/Applications/Foresight 中文.app`
+   (runs `launch.sh`, with Foresight's icon) and adds it to the Dock:
 
    ```bash
-   osacompile -o ~/Applications/"Foresight 中文.app" -e 'do shell script "$HOME/tools/foresight-zh/launch.sh"'
+   ./install-launcher.sh              # create the app and add it to the Dock
+   ./install-launcher.sh --uninstall  # remove both
    ```
+
+   Run it again after a Foresight update that changes the app icon. While Foresight runs, the
+   Dock also shows Foresight's own icon next to it.
 
 5. Optional, install the auto-relaunch watcher. This LaunchAgent checks every 5 seconds,
    and if Foresight is running without the shim, relaunches it through `launch.sh`. That
@@ -182,7 +187,7 @@ The shim checks before acting and logs what it skipped:
 - `shim/sherpa-onnx-c-api.h`: sherpa-onnx C API header (v1.13.8, Apache-2.0, Xiaomi Corporation)
 - `shim/test/sv_harness.c`: feeds a raw 48kHz float32 capture through the engine
 - `setup-sensevoice.sh`: downloads the engine; `shim/build.sh`: builds the shim
-- `launch.sh`: launcher; `~/Applications/Foresight 中文.app` wraps it
+- `launch.sh`: launcher; `~/Applications/Foresight 中文.app` wraps it (made by `install-launcher.sh`)
 - `watcher.sh`, `install-watcher.sh`: auto-relaunch LaunchAgent (detects the shim through
   `~/Library/Logs/foresight-zh/shim.pid`)
 - `model-build/`, `make_override.py`, `pipeline_override.pb`: the Gemma alternative
