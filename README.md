@@ -89,7 +89,7 @@ so Google's code signature and keychain access are untouched. The shim does thre
    the meeting summary, only past a word threshold, so unspaced Chinese looked nearly empty:
    no summary button and no meeting context in chat. The shim puts a hair space (U+200A,
    near-invisible) at every boundary next to a CJK character. The chat bridge removes them
-   again before text reaches the model.
+   again before text reaches the model, Qwen or Foresight's own Gemma.
 
 If the SenseVoice files are missing or fail to load, the shim falls back to Foresight's own
 engine (English).
@@ -131,6 +131,9 @@ Foresight after editing it.
 - The shim never starts the server: in `~/local-llm` only one model server runs at a time,
   and starting one evicts the others. When the server is down, or a different model is on
   the port, chat uses Gemma. The check is repeated every 5 seconds.
+- With `off` (or the server down), Gemma still gets the Chinese text without the spacing,
+  but meeting summaries stay in English: the Chinese-output instruction below is only
+  added on the Qwen path.
 - Foresight's own sampling (temperature 0.4, top_k 40, tuned for Gemma) is not forwarded.
   The llama.cpp profile applies Qwen's non-thinking settings itself. Splash has no server
   defaults, so the `chat` line above sends them: thinking off plus temperature 0.7, top_p

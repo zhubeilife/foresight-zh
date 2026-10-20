@@ -79,7 +79,8 @@ Foresight 的实时转写由 Google 闭源的 ODML 转写库完成。Dart 界面
 3. **为 Foresight 的词数统计给中文加空格。** Foresight 按空格分隔的"词"来衡量转写长度：
    聊天检索用的实时转写片段、以及会议摘要按钮，都要达到一定词数才会出现。没有空格的中文
    因此看起来几乎是空的：没有摘要按钮，聊天里也没有会议内容。shim 在每个中日韩字符的边界
-   插入一个极细空格（U+200A，几乎看不见），聊天转接层在把文字交给模型前再去掉。
+   插入一个极细空格（U+200A，几乎看不见），聊天转接层在把文字交给模型（Qwen 或 Foresight
+   自带的 Gemma）前再去掉。
 
 如果 SenseVoice 文件缺失或加载失败，shim 会退回 Foresight 自带的引擎（英文）。
 
@@ -115,6 +116,8 @@ echo 'http://127.0.0.1:8000/v1 incoai/Qwen3.8-27B-Splash {"reasoning_effort":"no
 
 - shim 不会自己启动模型服务：`~/local-llm` 同一时间只运行一个模型服务，启动一个会停掉其他的。
   服务没运行、或者端口上是别的模型时，聊天用 Gemma。每 5 秒重新检查一次。
+- 设为 `off`（或服务没运行）时，交给 Gemma 的中文同样会去掉这些空格；但会议摘要仍是英文，
+  因为下面"要求用中文输出"的指令只在 Qwen 路径上添加。
 - Foresight 自己的采样参数（temperature 0.4、top_k 40，为 Gemma 调的）不会转发。llama.cpp
   服务端会自动使用 Qwen 的非思考模式参数；Splash 服务端没有默认值，所以上面的 `chat` 行自己
   带上：关闭思考，temperature 0.7、top_p 0.8、top_k 20。Qwen 推荐的第四个参数

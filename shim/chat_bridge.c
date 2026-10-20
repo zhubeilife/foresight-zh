@@ -3,7 +3,8 @@
 // Foresight's chat calls LiteRT-LM's conversation C API (litert_lm_*) with JSON
 // messages and runs Gemma 4 E2B. When the local OpenAI-compatible server is up
 // (default: the shared qwen38-27b-gguf llama-server on :8096), conversations are
-// served by it instead. When it is down, every call goes to the real API.
+// served by it instead. When it is down (or the bridge is off), every call goes
+// to the real API, with the shim's CJK spacing removed from the message text.
 //
 // Protocol (traced from Foresight 1.0.0):
 //   create_conversation_v2(engine, config_json) -> conv
@@ -280,6 +281,54 @@ static char *text_chunk(const char *text) {
 }
 
 static char *empty_chunk(void) { return calloc(1, 1); }
+
+// Unspaces the text of one LiteRT-LM message in place (content string or text
+// parts). Returns 1 if anything was removed.
+static int unspace_message(cJSON *m) {
+  int changed = 0;
+  cJSON *content = cJSON_GetObjectItemCaseSensitive(m, "content"), *part;
+  if (cJSON_IsString(content)) {
+    size_t n = strlen(content->valuestring);
+    return strlen(unspace_cjk(content->valuestring)) != n;
+  }
+  cJSON_ArrayForEach(part, content) {
+    cJSON *t = cJSON_GetObjectItemCaseSensitive(part, "text");
+    if (!cJSON_IsString(t)) continue;
+    size_t n = strlen(t->valuestring);
+    changed |= strlen(unspace_cjk(t->valuestring)) != n;
+  }
+  return changed;
+}
+
+// For Foresight's own Gemma: the same JSON with the spacing removed from message
+// text, or NULL to pass the original through (nothing to remove, or unparsable).
+// config: a create_conversation_v2 config ({"messages":[...]}); else one message.
+// Free with cJSON_free. LiteRT-LM parses its JSON arguments before returning.
+static char *unspace_json(const char *json, int config) {
+  cJSON *j = json ? cJSON_Parse(json) : NULL, *m;
+  if (!j) return NULL;
+  int changed = 0;
+  if (config) {
+    cJSON_ArrayForEach(m, cJSON_GetObjectItemCaseSensitive(j, "messages")) changed |= unspace_message(m);
+  } else {
+    changed = unspace_message(j);
+  }
+  char *out = changed ? cJSON_PrintUnformatted(j) : NULL;
+  cJSON_Delete(j);
+  if (!out) return NULL;
+  logf_("chat: CJK spacing removed for Gemma (%zu -> %zu bytes)", strlen(json), strlen(out));
+  if (g_trace_chat && g_dump_dir[0]) {
+    static int seq;
+    char p[800];
+    snprintf(p, sizeof p, "%s/gemma-%04d.json", g_dump_dir, __sync_add_and_fetch(&seq, 1));
+    FILE *f = fopen(p, "w");
+    if (f) {
+      fputs(out, f);
+      fclose(f);
+    }
+  }
+  return out;
+}
 
 // ------------------------------------------------------------------ HTTP ---
 
@@ -607,7 +656,12 @@ static int push_message(Conv *c, const char *msg_json) {
 // ------------------------------------------------------------ replacements ---
 
 static void *my_create_v2(void *engine, const char *config_json) {
-  if (!config_json || !server_up()) return R.create_v2(engine, config_json);
+  if (!config_json || !g_url[0] || !server_up()) {
+    char *s = unspace_json(config_json, 1);
+    void *conv = R.create_v2(engine, s ? s : config_json);
+    cJSON_free(s);
+    return conv;
+  }
   cJSON *cfg = cJSON_Parse(config_json);
   if (!cfg) return R.create_v2(engine, config_json);
   cJSON *msgs = cJSON_CreateArray();
@@ -652,7 +706,12 @@ static void my_delete(void *conv) {
 
 static int my_send_stream(void *conv, const char *msg, stream_cb cb, void *ud) {
   Conv *c = find_conv(conv);
-  if (!c) return R.send_stream(conv, msg, cb, ud);
+  if (!c) {
+    char *s = unspace_json(msg, 0);
+    int rc = R.send_stream(conv, s ? s : msg, cb, ud);
+    cJSON_free(s);
+    return rc;
+  }
   if (!msg || !push_message(c, msg)) {
     cb(empty_chunk(), ud);
     return 0;
@@ -673,7 +732,12 @@ static int my_send_stream(void *conv, const char *msg, stream_cb cb, void *ud) {
 // Non-streaming variant: same streamed request, reply returned as one JSON string.
 static char *my_send(void *conv, const char *msg) {
   Conv *c = find_conv(conv);
-  if (!c) return R.send(conv, msg);
+  if (!c) {
+    char *s = unspace_json(msg, 0);
+    char *out = R.send(conv, s ? s : msg);
+    cJSON_free(s);
+    return out;
+  }
   if (!msg || !push_message(c, msg)) return text_chunk("");
   Req *r = calloc(1, sizeof *r);
   r->conv = c;
@@ -705,7 +769,7 @@ void chat_bridge_init(const char *home, int trace) {
   }
   if (strcmp(line, "off") == 0) {
     g_url[0] = 0;
-    logf_("chat: bridge off (Gemma)");
+    logf_("chat: bridge off (Gemma, CJK spacing removed)");
     return;
   }
   // "<base_url> [model] [{extra request fields}]"
@@ -731,8 +795,8 @@ void chat_bridge_init(const char *home, int trace) {
   free(x);
 }
 
+// Hooked even when the bridge is off, so Gemma gets unspaced text.
 void *chat_bridge_wrap(const char *symbol, void *real) {
-  if (!g_url[0]) return NULL;
 #define HOOK(name, field, fn)                \
   if (strcmp(symbol, name) == 0) {           \
     R.field = (__typeof__(R.field))real;     \
